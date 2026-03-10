@@ -1,0 +1,75 @@
+# TP 5 : Haute disponibilité ALB public, ASG privé, health check
+
+**Étudiant :** GASMI Karim  
+**Formation :** Master 1 Systèmes, Réseaux et Cloud Computing (SRC)  
+**Module :** Cloud Computing AWS  
+**Compte AWS :** 311493920732  
+**Année :** 2025-2026  
+
+########################################
+TP5 – Notes d’analyse
+########################################
+
+Objectif :
+Mettre en place une architecture hautement disponible avec :
+- ALB public (Layer 7)
+- Instances privées en ASG multi-AZ
+- Health checks actifs
+- Self-healing
+
+Architecture :
+Internet → ALB (public subnets)
+ALB → EC2 (private subnets)
+EC2 sans IP publique
+
+Sécurité :
+✅ Seul ALB exposé
+✅ Instances privées
+✅ Pas de SSH public
+✅ SG référencés
+✅ Health checks actifs
+
+User-data :
+Installation nginx au boot
+Création page dynamique avec hostname
+
+Health checks :
+Path "/"
+Port 80
+Code attendu : HTTP 200
+
+ASG :
+min = 2
+desired = 2
+max = 4
+Grace period = 300s
+
+Incident rencontré :
+- Instances unhealthy
+- 502 Bad Gateway ALB
+Cause :
+Health check exécuté avant nginx prêt
+
+Correction :
+✅ Augmentation health-check-grace-period
+✅ Instance refresh
+✅ Vérification nginx + curl localhost
+
+Tests validation :
+✅ URL ALB répond
+✅ Targets healthy
+✅ Répartition OK
+✅ Self-healing OK
+
+Simulation panne :
+Terminaison volontaire d’une instance
+ASG recrée automatiquement une nouvelle instance
+
+Résultat :
+Continuité de service validée
+Nouvelle instance devient healthy
+
+Conclusion :
+Architecture HA fonctionnelle
+ALB + ASG assurent résilience et auto-réparation
+########################################
