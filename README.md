@@ -2,6 +2,9 @@
 
 Travaux pratiques AWS réalisés avec Terraform.
 
+Réalisé par Karim GASMI
+M1 Systèmes, Réseaux & Cloud Computing - ESGI
+Cloud Computing AWS - M. Bounif
 ---
 
 ## Structure
