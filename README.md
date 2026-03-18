@@ -30,7 +30,7 @@ Travaux pratiques AWS réalisés en Terraform.
 ## Utilisation
 
 ```bash
-cd tp-06/   # ou tp-07/ ou tp-08/ ou tp-09/
+cd tp-06/   # ou tp-07/ ou tp-08/ ou tp-09/ ou tp-xx/
 cp terraform.tfvars.example terraform.tfvars
 terraform init
 terraform plan
