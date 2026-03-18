@@ -18,12 +18,12 @@ resource "aws_s3_bucket" "tp6_bucket" {
   bucket = var.bucket_name
 
   tags = {
-    Name       = var.bucket_name
-    Project    = var.project
-    Owner      = var.owner
+    Name        = var.bucket_name
+    Project     = var.project
+    Owner       = var.owner
     Environment = var.environment
-    ManagedBy  = "Terraform"
-    TP         = "TP6"
+    ManagedBy   = "Terraform"
+    TP          = "TP6"
   }
 }
 
@@ -51,7 +51,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "tp6_encryption" {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
-    bucket_key_enabled = true
   }
 }
 
