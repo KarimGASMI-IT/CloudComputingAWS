@@ -19,7 +19,7 @@ db_name     = "tp7db"
 db_username = "tp7admin"
 db_password = "admin1234*" 
 
-postgres_engine_version = "16.4"
+postgres_engine_version = "16.12"
 db_instance_class       = "db.t3.micro"
 allocated_storage       = 20
 
