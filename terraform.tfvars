@@ -1,0 +1,6 @@
+region      = "eu-west-3"
+aws_profile = "training"
+bucket_name = "training-karim-tp6-s3-terraform"
+project     = "TP-Cloud"
+owner       = "ops-student"
+environment = "Training"
