@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -19,10 +20,25 @@ resource "aws_dynamodb_table" "tp8_orders" {
   hash_key     = "PK"
   range_key    = "SK"
 
-  attribute { name = "PK" type = "S" }
-  attribute { name = "SK" type = "S" }
-  attribute { name = "GSI1PK" type = "S" }
-  attribute { name = "GSI1SK" type = "S" }
+  attribute {
+    name = "PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S"
+  }
+
+  attribute {
+    name = "GSI1PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "GSI1SK"
+    type = "S"
+  }
 
   global_secondary_index {
     name            = "GSI1"
@@ -38,4 +54,9 @@ resource "aws_dynamodb_table" "tp8_orders" {
 
   stream_enabled   = true
   stream_view_type = "NEW_AND_OLD_IMAGES"
+
+  tags = {
+    TP      = "08"
+    Project = "CloudComputingAWS"
+  }
 }
