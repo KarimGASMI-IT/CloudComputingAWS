@@ -1,0 +1,32 @@
+{
+  "PK": {
+    "S": "USER#U003"
+  },
+  "SK": {
+    "S": "ORDER#2026-03-23T10:00:00Z#O108"
+  },
+  "OrderId": {
+    "S": "O108"
+  },
+  "UserId": {
+    "S": "U003"
+  },
+  "OrderDate": {
+    "S": "2026-03-23T10:00:00Z"
+  },
+  "Status": {
+    "S": "SHIPPED"
+  },
+  "Amount": {
+    "N": "80"
+  },
+  "GSI1PK": {
+    "S": "STATUS#SHIPPED"
+  },
+  "GSI1SK": {
+    "S": "2026-03-23#USER#U003#ORDER#O108"
+  },
+  "expires_at": {
+    "N": "1770000000"
+  }
+}

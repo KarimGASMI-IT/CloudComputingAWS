@@ -1,0 +1,32 @@
+{
+  "PK": {
+    "S": "USER#U001"
+  },
+  "SK": {
+    "S": "ORDER#2026-03-24T10:00:00Z#O109"
+  },
+  "OrderId": {
+    "S": "O109"
+  },
+  "UserId": {
+    "S": "U001"
+  },
+  "OrderDate": {
+    "S": "2026-03-24T10:00:00Z"
+  },
+  "Status": {
+    "S": "PENDING"
+  },
+  "Amount": {
+    "N": "90"
+  },
+  "GSI1PK": {
+    "S": "STATUS#PENDING"
+  },
+  "GSI1SK": {
+    "S": "2026-03-24#USER#U001#ORDER#O109"
+  },
+  "expires_at": {
+    "N": "1770000000"
+  }
+}
