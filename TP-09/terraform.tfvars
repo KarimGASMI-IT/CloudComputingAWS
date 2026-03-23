@@ -1,0 +1,13 @@
+region               = "eu-west-3"
+profile              = "admin"
+bucket_name          = "REPLACE_WITH_TP6_BUCKET_NAME"
+input_prefix         = "input/"
+output_prefix        = "output/"
+lambda_function_name = "tp9-s3-validator"
+lambda_role_name     = "tp9-s3-validator-role"
+lambda_runtime       = "python3.11"
+lambda_timeout       = 10
+lambda_memory_size   = 128
+max_size_bytes       = 1048576
+allowed_extensions   = [".txt", ".json", ".png"]
+log_retention_days   = 7
