@@ -247,10 +247,15 @@ Ce problème est **indépendant de l’infrastructure AWS**.
 ## Validation du TP
 
 ✔ Upload valide déclenche la Lambda
+
 ✔ Output généré dans `output/`
+
 ✔ Upload invalide rejeté
+
 ✔ Aucun fichier non conforme produit
+
 ✔ Logs contenant `request_id` et `status`
+
 ✔ Rôle IAM minimal respecté
 
 ---
