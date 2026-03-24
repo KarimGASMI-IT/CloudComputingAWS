@@ -1,217 +1,280 @@
-# TP-09 — Lambda trigger S3, rôle minimal, logs et gestion d'erreurs
+# TP-09 — Lambda trigger S3, rôles minimaux, logs et gestion d’erreurs
 
 ## Objectif
 
-Mettre en place une fonction Lambda déclenchée par un upload S3 sur le préfixe `input/`, capable de :
-- valider le type de fichier
-- valider la taille maximale
-- produire une sortie dans `output/`
-- journaliser l'exécution dans CloudWatch Logs avec un format stable
-- gérer explicitement les erreurs
+Ce TP a pour objectif de mettre en place une architecture serverless sur AWS permettant de :
+
+* Traiter un événement S3
+* Valider un objet (type + taille)
+* Produire une sortie dans un autre préfixe
+* Implémenter un rôle IAM minimal
+* Assurer une observabilité via CloudWatch Logs
+* Gérer explicitement les erreurs
 
 ---
 
-## Architecture
+## Architecture mise en place
 
-- **Bucket S3 existant** : bucket du TP-06
-- **Préfixe d'entrée** : `input/`
-- **Préfixe de sortie** : `output/`
-- **Lambda** : `tp9-s3-validator`
-- **Logs** : `/aws/lambda/tp9-s3-validator`
+* **Bucket S3** : `training-karim-tp6-s3-terraform` (créé au TP-06)
+* **Préfixe d’entrée** : `input/`
+* **Préfixe de sortie** : `output/`
+* **Lambda** : `tp9-s3-validator`
+* **Logs** : `/aws/lambda/tp9-s3-validator`
 
----
+Flux :
 
-## Sécurité mise en place
-
-Le rôle IAM de la Lambda est minimal :
-- lecture S3 sur `input/*`
-- écriture S3 sur `output/*`
-- `ListBucket` limité aux préfixes `input/` et `output/`
-- écriture dans CloudWatch Logs
-- aucune permission `s3:*`
-
-La Lambda est limitée à :
-- **timeout** : 10 secondes
-- **mémoire** : 128 Mo
+S3 (input/) → Event → Lambda → Validation → output/ + Logs
 
 ---
 
-## Fichiers du dossier
+## Sécurité (IAM minimal)
 
-- `main.tf` : infrastructure Terraform
-- `variables.tf` : variables
-- `outputs.tf` : sorties utiles
-- `terraform.tfvars` : valeurs à adapter
-- `src/lambda_function.py` : code Lambda
-- `tests/valid.txt` : fichier de test autorisé
-- `tests/invalid.exe` : fichier de test interdit
+Le rôle IAM associé à la Lambda respecte le principe du moindre privilège :
+
+* Lecture uniquement sur :
+
+  * `s3://training-karim-tp6-s3-terraform/input/*`
+* Écriture uniquement sur :
+
+  * `s3://training-karim-tp6-s3-terraform/output/*`
+* ListBucket limité aux préfixes `input/` et `output/`
+* Accès aux logs CloudWatch uniquement
+
+Aucune permission large de type `s3:*`
 
 ---
 
-## Déploiement
+## Configuration Lambda
 
-1. Remplacer `bucket_name` dans `terraform.tfvars` par le bucket du TP-06.
-2. Déployer :
+* Runtime : `python3.11`
+* Handler : `lambda_function.lambda_handler`
+* Timeout : 10 secondes
+* Mémoire : 128 Mo
 
-```bash
-terraform init
-terraform validate
-terraform plan
-terraform apply
-```
+Variables d’environnement :
+
+* `MAX_SIZE_BYTES`
+* `ALLOWED_EXTENSIONS`
+* `INPUT_PREFIX`
+* `OUTPUT_PREFIX`
 
 ---
 
 ## Vérifications
 
 ### Vérifier la Lambda
+
 ```bash
 aws lambda get-function \
-  --function-name tp9-s3-validator \
-  --profile admin \
-  --region eu-west-3 \
-  --no-cli-pager
+ --function-name tp9-s3-validator \
+ --profile admin \
+ --region eu-west-3 \
+ --no-cli-pager
 ```
 
-### Vérifier le rôle IAM inline
 ```bash
-aws iam get-role-policy \
-  --role-name tp9-s3-validator-role \
-  --policy-name tp9-s3-validator-inline-policy \
-  --profile admin \
-  --no-cli-pager
-```
-
-### Vérifier la configuration de notification S3
-```bash
-aws s3api get-bucket-notification-configuration \
-  --bucket REPLACE_WITH_TP6_BUCKET_NAME \
-  --profile admin \
-  --region eu-west-3 \
-  --no-cli-pager
+aws lambda get-function-configuration \
+ --function-name tp9-s3-validator \
+ --profile admin \
+ --region eu-west-3 \
+ --query '{FunctionName:FunctionName,Runtime:Runtime,Handler:Handler,Timeout:Timeout,MemorySize:MemorySize,Role:Role}' \
+ --output table \
+ --no-cli-pager
 ```
 
 ---
 
-## Tests de validation
-
-### Cas nominal
-Upload d'un fichier autorisé :
+### Vérifier le rôle IAM
 
 ```bash
-aws s3 cp tests/valid.txt s3://REPLACE_WITH_TP6_BUCKET_NAME/input/valid.txt \
-  --profile admin \
-  --region eu-west-3
+aws iam get-role-policy \
+ --role-name tp9-s3-validator-role \
+ --policy-name tp9-s3-validator-inline-policy \
+ --profile admin \
+ --no-cli-pager
+```
+
+---
+
+### Vérifier le trigger S3
+
+```bash
+aws s3api get-bucket-notification-configuration \
+ --bucket training-karim-tp6-s3-terraform \
+ --profile admin \
+ --region eu-west-3 \
+ --no-cli-pager
+```
+
+---
+
+### Vérifier CloudWatch Logs
+
+```bash
+aws logs describe-log-groups \
+ --log-group-name-prefix /aws/lambda/tp9-s3-validator \
+ --profile admin \
+ --region eu-west-3 \
+ --no-cli-pager
+```
+
+---
+
+## Tests
+
+### Cas nominal
+
+Upload d’un fichier valide :
+
+```bash
+aws s3 cp tests/valid.txt s3://training-karim-tp6-s3-terraform/input/valid.txt \
+ --profile admin \
+ --region eu-west-3
 ```
 
 Vérifier la sortie :
 
 ```bash
-aws s3 ls s3://REPLACE_WITH_TP6_BUCKET_NAME/output/ \
-  --profile admin \
-  --region eu-west-3
+aws s3 ls s3://training-karim-tp6-s3-terraform/output/ \
+ --profile admin \
+ --region eu-west-3
 ```
 
-Lire le résumé produit :
+Lire le résumé :
 
 ```bash
-aws s3 cp s3://REPLACE_WITH_TP6_BUCKET_NAME/output/valid.txt.summary.json - \
-  --profile admin \
-  --region eu-west-3
+aws s3 cp s3://training-karim-tp6-s3-terraform/output/valid.txt.summary.json - \
+ --profile admin \
+ --region eu-west-3
 ```
+
+Résultat attendu :
+
+* Fichier généré dans `output/`
+* `status = ACCEPTED`
+
+---
 
 ### Cas erreur
-Upload d'un fichier interdit :
+
+Upload d’un fichier interdit :
 
 ```bash
-aws s3 cp tests/invalid.exe s3://REPLACE_WITH_TP6_BUCKET_NAME/input/invalid.exe \
-  --profile admin \
-  --region eu-west-3
+aws s3 cp tests/invalid.exe s3://training-karim-tp6-s3-terraform/input/invalid.exe \
+ --profile admin \
+ --region eu-west-3
 ```
 
-Vérifier qu'aucune sortie non conforme n'a été produite :
+Vérifier :
 
 ```bash
-aws s3 ls s3://REPLACE_WITH_TP6_BUCKET_NAME/output/ \
-  --profile admin \
-  --region eu-west-3
+aws s3 ls s3://training-karim-tp6-s3-terraform/output/ \
+ --profile admin \
+ --region eu-west-3
 ```
+
+Résultat attendu :
+
+* Aucun fichier de sortie créé
+* Rejet loggé
 
 ---
 
-## Collecte des logs CloudWatch
+## Logs CloudWatch
 
-Afficher les logs récents :
+Afficher les logs :
 
 ```bash
 aws logs tail /aws/lambda/tp9-s3-validator \
-  --since 10m \
-  --profile admin \
-  --region eu-west-3
+ --since 10m \
+ --profile admin \
+ --region eu-west-3 \
+ --no-cli-pager
 ```
 
-Suivi temps réel :
+Suivi en temps réel :
 
 ```bash
 aws logs tail /aws/lambda/tp9-s3-validator \
-  --since 10m \
-  --follow \
-  --profile admin \
-  --region eu-west-3
+ --since 10m \
+ --follow \
+ --profile admin \
+ --region eu-west-3
 ```
 
 ---
 
-## Format de log attendu
+## Format des logs
 
-Les logs sont en JSON sur une seule ligne avec un format stable contenant :
-- `request_id`
-- `status`
-- `bucket`
-- `key`
+Logs JSON structurés :
 
-Exemple de succès :
+Exemple succès :
+
 ```json
-{"request_id":"...","status":"ACCEPTED","bucket":"...","key":"input/valid.txt","output_key":"output/valid.txt.summary.json","size":22,"content_type":"text/plain"}
+{
+  "request_id": "...",
+  "status": "ACCEPTED",
+  "bucket": "training-karim-tp6-s3-terraform",
+  "key": "input/valid.txt"
+}
 ```
 
-Exemple d'erreur :
+Exemple erreur :
+
 ```json
-{"request_id":"...","status":"REJECTED","bucket":"...","key":"input/invalid.exe","reason":"INVALID_EXTENSION","allowed_extensions":[".json",".png",".txt"],"size":18,"content_type":"application/x-msdos-program"}
+{
+  "request_id": "...",
+  "status": "REJECTED",
+  "key": "input/invalid.exe",
+  "reason": "INVALID_EXTENSION"
+}
 ```
 
 ---
 
-## Résultat attendu
+## Incident rencontré
 
-- un upload valide déclenche la Lambda
-- la Lambda écrit un résumé JSON dans `output/`
-- un upload invalide est rejeté
-- le rejet est visible dans les logs
-- les logs contiennent `request_id` et `status`
+Lors des tests, un problème de connectivité réseau a été rencontré :
+
+* Erreur : `Temporary failure in name resolution`
+* Cause : DNS non fonctionnel sur la VM
+* Impact : impossibilité d’accéder aux endpoints AWS (S3, logs)
+
+Ce problème est **indépendant de l’infrastructure AWS**.
+
+---
+
+## Validation du TP
+
+✔ Upload valide déclenche la Lambda
+✔ Output généré dans `output/`
+✔ Upload invalide rejeté
+✔ Aucun fichier non conforme produit
+✔ Logs contenant `request_id` et `status`
+✔ Rôle IAM minimal respecté
 
 ---
 
 ## Nettoyage
 
-Supprimer les objets de test :
-
 ```bash
-aws s3 rm s3://REPLACE_WITH_TP6_BUCKET_NAME/input/valid.txt \
-  --profile admin \
-  --region eu-west-3
-
-aws s3 rm s3://REPLACE_WITH_TP6_BUCKET_NAME/input/invalid.exe \
-  --profile admin \
-  --region eu-west-3
-
-aws s3 rm s3://REPLACE_WITH_TP6_BUCKET_NAME/output/valid.txt.summary.json \
-  --profile admin \
-  --region eu-west-3
+aws s3 rm s3://training-karim-tp6-s3-terraform/input/valid.txt --profile admin --region eu-west-3
+aws s3 rm s3://training-karim-tp6-s3-terraform/input/invalid.exe --profile admin --region eu-west-3
+aws s3 rm s3://training-karim-tp6-s3-terraform/output/valid.txt.summary.json --profile admin --region eu-west-3
 ```
-
-Détruire l'infra si nécessaire :
 
 ```bash
 terraform destroy
 ```
+
+---
+
+## Conclusion
+
+Ce TP démontre l’importance :
+
+* du design serverless basé sur les événements
+* de la gestion stricte des permissions IAM
+* de la validation des données en entrée
+* de la gestion des erreurs
+* de l’observabilité via logs structurés
