@@ -19,7 +19,7 @@ Cloud Computing AWS - M. Bounif
 | `TP-09/` | Lambda trigger S3, rôles minimaux, logs et gestion d'erreurs |
 | `TP-10/` | API Gateway, SQS, DLQ pipeline asynchrone robuste |
 | `TP-11/` | Observabilité CloudWatch, CloudTrail, Flow Logs, alarmes |
-| `TP-12/` | KMS et Screts Manager chiffrements et secrets au runtime, triage GuardDuty |
+| `TP-12/` | KMS et Secrets Manager chiffrements et secrets au runtime, triage GuardDuty |
 | `TP-13/` | Infrastructure as Code CloudFormation socle réseau reproductible |
 | `TP-14/` | Conteneurs managés ECR, ECS Fargate, ALB, logs CloudWatch |
 | `TP-15/` | FinOps et résilience budgets, tags, test de continuité et runbook PRA |
