@@ -1,0 +1,8 @@
+aws_region         = "eu-west-3"
+aws_profile        = "admin"
+project_name       = "tp14-karim"
+image_tag          = "v1"
+
+vpc_id             = "vpc-xxxxxxxx"
+public_subnet_ids  = ["subnet-public-a", "subnet-public-b"]
+private_subnet_ids = ["subnet-private-a", "subnet-private-b"]
