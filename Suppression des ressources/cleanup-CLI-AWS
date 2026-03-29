@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+PROFILE="${AWS_PROFILE:-admin}"
+REGION="${AWS_REGION:-eu-west-3}"
+
+echo "PROFILE=$PROFILE"
+echo "REGION=$REGION"
+echo
+echo "⚠️  Script DESTRUCTIF : suppression large des ressources AWS dans $REGION"
+read -r -p "Tape YES pour continuer : " CONFIRM
+[[ "$CONFIRM" == "YES" ]] || { echo "Annulé."; exit 1; }
+
+need() { command -v "$1" >/dev/null 2>&1 || { echo "Commande manquante: $1"; exit 1; }; }
+need aws
+need jq
+
+run() {
+  echo "+ $*"
+  "$@"
+}
+
+# 1) ECS: services -> tasks -> cluster
+echo "=== ECS ==="
+CLUSTERS=$(aws ecs list-clusters --profile "$PROFILE" --region "$REGION" --query 'clusterArns[]' --output text || true)
+for CLUSTER in $CLUSTERS; do
+  SERVICES=$(aws ecs list-services --cluster "$CLUSTER" --profile "$PROFILE" --region "$REGION" --query 'serviceArns[]' --output text || true)
+  for SERVICE in $SERVICES; do
+    run aws ecs update-service \
+      --cluster "$CLUSTER" \
+      --service "$SERVICE" \
+      --desired-count 0 \
+      --profile "$PROFILE" \
+      --region "$REGION" || true
+
+    run aws ecs delete-service \
+      --cluster "$CLUSTER" \
+      --service "$SERVICE" \
+      --force \
+      --profile "$PROFILE" \
+      --region "$REGION" || true
+  done
+
+  TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --profile "$PROFILE" --region "$REGION" --query 'taskArns[]' --output text || true)
+  for TASK in $TASKS; do
+    run aws ecs stop-task \
+      --cluster "$CLUSTER" \
+      --task "$TASK" \
+      --reason "cleanup" \
+      --profile "$PROFILE" \
+      --region "$REGION" || true
+  done
+done
+
+sleep 10
+
+for CLUSTER in $CLUSTERS; do
+  run aws ecs delete-cluster \
+    --cluster "$CLUSTER" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 2) Auto Scaling Groups
+echo "=== Auto Scaling ==="
+ASGS=$(aws autoscaling describe-auto-scaling-groups \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'AutoScalingGroups[].AutoScalingGroupName' \
+  --output text || true)
+
+for ASG in $ASGS; do
+  run aws autoscaling update-auto-scaling-group \
+    --auto-scaling-group-name "$ASG" \
+    --min-size 0 --max-size 0 --desired-capacity 0 \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+
+  run aws autoscaling delete-auto-scaling-group \
+    --auto-scaling-group-name "$ASG" \
+    --force-delete \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 3) Load Balancers
+echo "=== ELBv2 ==="
+LBS=$(aws elbv2 describe-load-balancers \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'LoadBalancers[].LoadBalancerArn' \
+  --output text || true)
+
+for LB in $LBS; do
+  run aws elbv2 delete-load-balancer \
+    --load-balancer-arn "$LB" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+sleep 20
+
+TGS=$(aws elbv2 describe-target-groups \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'TargetGroups[].TargetGroupArn' \
+  --output text || true)
+
+for TG in $TGS; do
+  run aws elbv2 delete-target-group \
+    --target-group-arn "$TG" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 4) Lambda
+echo "=== Lambda ==="
+FUNCS=$(aws lambda list-functions \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'Functions[].FunctionName' \
+  --output text || true)
+
+for FN in $FUNCS; do
+  run aws lambda delete-function \
+    --function-name "$FN" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 5) API Gateway v1
+echo "=== API Gateway v1 ==="
+REST_APIS=$(aws apigateway get-rest-apis \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'items[].id' \
+  --output text || true)
+
+for API_ID in $REST_APIS; do
+  run aws apigateway delete-rest-api \
+    --rest-api-id "$API_ID" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 6) API Gateway v2
+echo "=== API Gateway v2 ==="
+HTTP_APIS=$(aws apigatewayv2 get-apis \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'Items[].ApiId' \
+  --output text || true)
+
+for API_ID in $HTTP_APIS; do
+  run aws apigatewayv2 delete-api \
+    --api-id "$API_ID" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 7) ECR
+echo "=== ECR ==="
+REPOS=$(aws ecr describe-repositories \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'repositories[].repositoryName' \
+  --output text || true)
+
+for REPO in $REPOS; do
+  run aws ecr delete-repository \
+    --repository-name "$REPO" \
+    --force \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 8) CloudWatch Logs
+echo "=== CloudWatch Logs ==="
+LOG_GROUPS=$(aws logs describe-log-groups \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'logGroups[].logGroupName' \
+  --output text || true)
+
+for LG in $LOG_GROUPS; do
+  run aws logs delete-log-group \
+    --log-group-name "$LG" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 9) S3: vider y compris versions, puis supprimer bucket
+echo "=== S3 ==="
+BUCKETS=$(aws s3api list-buckets --profile "$PROFILE" --query 'Buckets[].Name' --output text || true)
+
+for B in $BUCKETS; do
+  echo "Vidage du bucket: $B"
+
+  aws s3 rm "s3://$B" --recursive --profile "$PROFILE" --region "$REGION" || true
+
+  VJSON=$(aws s3api list-object-versions \
+    --bucket "$B" \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --output json 2>/dev/null || echo '{}')
+
+  DEL_PAYLOAD=$(echo "$VJSON" | jq -c '{Objects: ((.Versions // []) + (.DeleteMarkers // []) | map({Key: .Key, VersionId: .VersionId})), Quiet: true}')
+
+  if [[ "$(echo "$DEL_PAYLOAD" | jq '.Objects | length')" -gt 0 ]]; then
+    run aws s3api delete-objects \
+      --bucket "$B" \
+      --delete "$DEL_PAYLOAD" \
+      --profile "$PROFILE" \
+      --region "$REGION" || true
+  fi
+
+  run aws s3api delete-bucket \
+    --bucket "$B" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 10) NAT Gateways puis EIP
+echo "=== NAT Gateway ==="
+NGWS=$(aws ec2 describe-nat-gateways \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'NatGateways[?State!=`deleted`].NatGatewayId' \
+  --output text || true)
+
+for NGW in $NGWS; do
+  run aws ec2 delete-nat-gateway \
+    --nat-gateway-id "$NGW" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+sleep 15
+
+echo "=== Elastic IP ==="
+EIPS=$(aws ec2 describe-addresses \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'Addresses[].AllocationId' \
+  --output text || true)
+
+for EIP in $EIPS; do
+  run aws ec2 release-address \
+    --allocation-id "$EIP" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 11) EC2 instances
+echo "=== EC2 ==="
+INSTANCES=$(aws ec2 describe-instances \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'Reservations[].Instances[?State.Name!=`terminated`].InstanceId' \
+  --output text || true)
+
+if [[ -n "${INSTANCES:-}" ]]; then
+  run aws ec2 terminate-instances \
+    --instance-ids $INSTANCES \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+fi
+
+# 12) Volumes disponibles
+echo "=== EBS Volumes ==="
+VOLUMES=$(aws ec2 describe-volumes \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'Volumes[?State==`available`].VolumeId' \
+  --output text || true)
+
+for VOL in $VOLUMES; do
+  run aws ec2 delete-volume \
+    --volume-id "$VOL" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+# 13) Security groups non par défaut commençant par tp
+echo "=== Security Groups ==="
+SGS=$(aws ec2 describe-security-groups \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query 'SecurityGroups[?GroupName!=`default` && starts_with(GroupName, `tp`)].GroupId' \
+  --output text || true)
+
+for SG in $SGS; do
+  run aws ec2 delete-security-group \
+    --group-id "$SG" \
+    --profile "$PROFILE" \
+    --region "$REGION" || true
+done
+
+echo
+echo "=== Vérifications finales ==="
+aws ecs list-clusters --profile "$PROFILE" --region "$REGION"
+aws elbv2 describe-load-balancers --profile "$PROFILE" --region "$REGION" --query 'LoadBalancers[].LoadBalancerName'
+aws ec2 describe-instances --profile "$PROFILE" --region "$REGION" --query 'Reservations[].Instances[].InstanceId'
+aws ec2 describe-nat-gateways --profile "$PROFILE" --region "$REGION" --query 'NatGateways[?State!=`deleted`].NatGatewayId'
+aws s3api list-buckets --profile "$PROFILE" --query 'Buckets[].Name'
+aws ecr describe-repositories --profile "$PROFILE" --region "$REGION" --query 'repositories[].repositoryName' || true
+
+echo "Nettoyage terminé."
